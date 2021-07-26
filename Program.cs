@@ -95,7 +95,23 @@ namespace battleships
                         int bytesRec = handler.Receive(bytes);
                     }
                 );
+                string [,] enemyGrid = SetupGrid();
+                enemyGrid = (myTurn(enemyGrid, handler));
+                msg = Encoding.ASCII.GetBytes("done");  
+                handler.Send(msg);
+                    AnsiConsole.Status().Start("It is the other players turn", ctx =>
+                    {
+                        byte[] bytes = new byte[1024];
+                        int bytesRec = handler.Receive(bytes);
+                        
+                        byte[] toSend = new byte[1];
+                        toSend[0] = Convert.ToByte(hitDetector(Encoding.ASCII.GetString(bytes,0,bytesRec),myGrid));
+                        handler.Send(toSend);
 
+                        bytes = new byte[1024];
+                        bytesRec = handler.Receive(bytes);
+                    }
+                );
         }
 
         public static void Connect(string ip){
@@ -123,6 +139,26 @@ namespace battleships
             string[,] myGrid = placeBoats();
             byte[] msg = Encoding.ASCII.GetBytes("done");  
             sender.Send(msg);
+            string [,] enemyGrid = SetupGrid();
+            AnsiConsole.Status().Start("It is the other players turn", ctx =>
+                    {
+                        byte[] bytes = new byte[1024];
+                        int bytesRec = sender.Receive(bytes);
+                        
+                        byte[] toSend = new byte[1];
+                        toSend[0] = Convert.ToByte(hitDetector(Encoding.ASCII.GetString(bytes,0,bytesRec),myGrid));
+                        sender.Send(toSend);
+
+                        bytes = new byte[1024];
+                        bytesRec = sender.Receive(bytes);
+                    }
+                );
+            AnsiConsole.MarkupLine("Your Turn");
+            Console.ReadLine();
+            enemyGrid = (myTurn(enemyGrid, sender));
+            msg = Encoding.ASCII.GetBytes("done");  
+            sender.Send(msg);
+
         }
 
         public static string[,] SetupGrid(){
@@ -144,7 +180,7 @@ namespace battleships
             // }
             //grid[0,1] = '⬛';
             // update the table
-            updateTable(grid);
+            
 
             return grid;
         }
@@ -169,6 +205,7 @@ namespace battleships
 
         public static string[,] placeBoats(){
             string[,] grid = SetupGrid();
+            updateTable(grid);
 
             string[] shipNames = {"Destroyer", "Submarine", "Cruiser", "Battleship", "Carrier"};
             int[] shipSizes = {2,2,3,4,5};
@@ -230,5 +267,72 @@ namespace battleships
             return grid;
         }
 
+        public static string[,] myTurn(string [,] enemyGrid, Socket link){
+            AnsiConsole.MarkupLine("Showing: [red]ENEMIES GRID[/]");
+            updateTable(enemyGrid);
+            string place = AnsiConsole.Ask<string>($"Where do you want to [red]fire[/] at?");
+            int number = -1;
+            try{
+                number = Int32.Parse(place.Remove(0,1));
+                if (Regex.IsMatch(place[0].ToString(), "[A-N]") && number <= 14 && number > 0){}
+                else{throw new Exception("reeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee");}
+            } catch (Exception e) {AnsiConsole.MarkupLine($"Something went wrong! ({e}) \n[red]The program may no longer function[/]\nIT IS HIGHLY RECOMENDED YOU RESTART YOUR GAME!");}
+            link.Send(Encoding.ASCII.GetBytes(place));
+            AnsiConsole.Status().Start("please wait", ctx =>
+                {
+                    byte[] bytes = new byte[1024];
+                    int bytesRec = link.Receive(bytes);
+                    bool hit = Convert.ToBoolean(bytes[0]);
+                    if (hit == true){
+                        AnsiConsole.MarkupLine("[red]HIT![/]");
+                        try{
+                            enemyGrid[row(place[0]),number] = $"[red]X[/]";
+                            updateTable(enemyGrid);
+                        } catch{}
+
+                    }else {
+                        AnsiConsole.MarkupLine("[yellow]MISS![/]");
+                        try{
+                            enemyGrid[row(place[0]),number] = $"[yellow]O[/]";
+                            updateTable(enemyGrid);
+                        } catch{}    
+                    }
+                    
+                }
+            );
+            return enemyGrid;
+        }
+        public static bool hitDetector(string coordinate, string[,] grid){
+            int therow = row(coordinate[0]);
+            try{int number = Int32.Parse(coordinate.Remove(0,1));
+            if (grid[therow,number] == $"[green]{"[]".EscapeMarkup()}[/]"){
+                    grid[therow,number] = $"[green]{"[".EscapeMarkup()}[/][red]X[/][green]{"]".EscapeMarkup()}[/]";
+                    updateTable(grid);
+                    AnsiConsole.MarkupLine($"The opponent [red]HIT[/] [green]{coordinate}[/]");
+                    return true;
+            }else{
+                grid[therow,number] = $"[yellow]O[/]";
+                updateTable(grid);
+                AnsiConsole.MarkupLine($"The opponent fired at [green]{coordinate}[/] and [yellow]MISSED[/] ");
+                return false;
+            }}
+            catch(Exception e){AnsiConsole.MarkupLine($"Something went wrong! ({e}) \nThe program may no longer function\nIT IS HIGHLY RECOMENDED YOU RESTART YOUR GAME!".EscapeMarkup());
+                               return false;}
+            
+        }
+        public static int row(char bob){
+            char[] test = {'A','B','C','D','E','F','G','H','I','J','K','L','M','N'};
+            int row = -1;
+            int k = 0;
+            foreach(char rowLetters in test){
+                if (rowLetters == bob){
+                    row = k;
+                }
+                else{
+                    k++;
+                }
+            }
+            return row;
+        }
     }
 }
